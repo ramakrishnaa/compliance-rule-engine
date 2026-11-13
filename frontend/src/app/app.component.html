@@ -1,0 +1,149 @@
+<header class="topbar">
+  <div class="wrap">
+    <h1>Transaction Compliance Evaluator</h1>
+    <p class="muted">Check each transaction against the customer's rules and list the rules it breaches.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="card inputs" aria-labelledby="inputs-title">
+    <h2 id="inputs-title">Input files</h2>
+    <div class="file-grid">
+      <label class="file">
+        <span class="file-label">Transactions <code>.json</code></span>
+        <input type="file" accept=".json,application/json" (change)="onFile('transactions', $event)"
+               data-testid="transactions-input" />
+        <span class="file-name">{{ transactionsFile()?.name ?? 'No file chosen' }}</span>
+      </label>
+      <label class="file">
+        <span class="file-label">Rules <code>.csv</code></span>
+        <input type="file" accept=".csv,text/csv" (change)="onFile('rules', $event)" data-testid="rules-input" />
+        <span class="file-name">{{ rulesFile()?.name ?? 'No file chosen' }}</span>
+      </label>
+    </div>
+    <div class="actions">
+      <button class="btn primary" type="button" [disabled]="!canEvaluate()" (click)="evaluateUploaded()"
+              data-testid="evaluate-btn">
+        Evaluate files
+      </button>
+      <button class="btn" type="button" [disabled]="loading()" (click)="evaluateSample()" data-testid="sample-btn">
+        Use the sample files
+      </button>
+      @if (loading()) {
+        <span class="muted" role="status">Evaluating…</span>
+      }
+    </div>
+  </section>
+
+  @if (error(); as message) {
+    <div class="alert error" role="alert" data-testid="error">{{ message }}</div>
+  }
+
+  @if (result(); as r) {
+    <p class="muted source">Results for {{ sourceLabel() }}</p>
+
+    <section class="stats" aria-label="Summary">
+      <div class="stat">
+        <span class="stat-value">{{ r.summary.transactionCount }}</span>
+        <span class="stat-label">Transactions</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">{{ r.summary.ruleCount }}</span>
+        <span class="stat-label">Rules loaded</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" data-testid="flagged-count">{{ r.summary.flaggedTransactionCount }}</span>
+        <span class="stat-label">Breach at least one rule</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" [class.warn-text]="r.issues.length > 0">{{ r.issues.length }}</span>
+        <span class="stat-label">Data warnings</span>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="results-title">
+      <div class="card-head">
+        <h2 id="results-title">Breached rules</h2>
+        <div class="segmented" role="tablist">
+          <button type="button" role="tab" [class.active]="view() === 'table'" [attr.aria-selected]="view() === 'table'"
+                  (click)="view.set('table')">Table</button>
+          <button type="button" role="tab" [class.active]="view() === 'text'" [attr.aria-selected]="view() === 'text'"
+                  (click)="view.set('text')" data-testid="text-tab">Text report</button>
+        </div>
+      </div>
+
+      @if (view() === 'table') {
+        <div class="filters">
+          <span class="muted">Breaches by severity:</span>
+          @for (s of severities; track s) {
+            <button type="button" class="chip sev-{{ s.toLowerCase() }}" [class.selected]="severityFilter() === s"
+                    [attr.aria-pressed]="severityFilter() === s" (click)="toggleSeverity(s)">
+              {{ s }} <strong>{{ r.summary.breachesBySeverity[s] }}</strong>
+            </button>
+          }
+          <label class="check">
+            <input type="checkbox" [checked]="flaggedOnly()" (change)="flaggedOnly.set(!flaggedOnly())" />
+            Hide transactions with no breaches
+          </label>
+        </div>
+
+        <div class="table-wrap">
+          <table data-testid="results-table">
+            <thead>
+              <tr>
+                <th scope="col">Transaction</th>
+                <th scope="col">Breached rules</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (t of visibleResults(); track $index) {
+                <tr>
+                  <td class="mono">{{ t.transactionId }}</td>
+                  <td>
+                    @for (b of t.breachedRules; track b.ruleId) {
+                      <span class="badge sev-{{ b.severity.toLowerCase() }}" [title]="b.ruleName">
+                        {{ b.ruleId }} <small>{{ b.severity }}</small>
+                      </span>
+                    } @empty {
+                      <span class="muted">none</span>
+                    }
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="2" class="muted">No transactions match the current filter.</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <div class="actions">
+          <button type="button" class="btn" (click)="copyReport()">{{ copied() ? 'Copied' : 'Copy' }}</button>
+          <button type="button" class="btn" (click)="downloadReport()">Download .txt</button>
+        </div>
+        <pre class="report" data-testid="text-report">{{ r.textReport }}</pre>
+      }
+    </section>
+
+    <section class="card" aria-labelledby="issues-title">
+      <h2 id="issues-title">Data warnings</h2>
+      @if (r.issues.length === 0) {
+        <p class="muted">No problems found in the input files.</p>
+      } @else {
+        <p class="muted">
+          These rows were skipped, adjusted or could not be fully evaluated. Rules that could not be evaluated are
+          treated as not breached.
+        </p>
+        <ul class="issues" data-testid="issues">
+          @for (i of r.issues; track $index) {
+            <li>
+              <span class="issue-source mono">{{ i.source }}</span>
+              <span>{{ i.message }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+</main>
